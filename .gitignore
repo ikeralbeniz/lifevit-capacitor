@@ -1,0 +1,42 @@
+# ---- Node / build output ----
+node_modules
+dist
+*.log
+
+# ---- macOS ----
+.DS_Store
+
+# ---- iOS / Swift ----
+Pods
+Podfile.lock
+Package.resolved
+.build
+.swiftpm
+DerivedData
+build
+xcuserdata
+*.xcuserstate
+*.xcworkspace/xcuserdata
+
+# ---- Android ----
+.gradle
+local.properties
+*.apk
+*.ap_
+*.dex
+*.class
+captures
+.externalNativeBuild
+*.iml
+.idea
+
+# ---- Example app ----
+example/node_modules
+# Generated native platforms: regenerate with `npx cap add android|ios`.
+# (Keeps the repo clean and avoids committing a personal signing team id.)
+example/android
+example/ios
+
+# Nota: el SDK de Lifevit NO se almacena aquí.
+#  - iOS: se trae como git submodule (ios/vendor/lifevit-ios-sdk).
+#  - Android: se descarga del repositorio Maven de Lifevit vía Gradle.

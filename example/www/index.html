@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Lifevit</title>
+    <style>
+      :root {
+        --bg: #0f1724; --card: #16213a; --fg: #e7ecf5; --muted: #9fb0c8;
+        --accent: #4ea1ff; --ok: #39d98a; --err: #ff6b6b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font-family: -apple-system, system-ui, sans-serif;
+        background: var(--bg); color: var(--fg);
+        padding: 16px; padding-top: env(safe-area-inset-top, 16px);
+      }
+      h1 { font-size: 20px; margin: 4px 0 16px; }
+      h2 { font-size: 16px; margin: 0 0 12px; }
+      .card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+      button {
+        font-size: 15px; border-radius: 10px; border: none; padding: 13px; width: 100%;
+        background: var(--accent); color: #042038; font-weight: 600; margin-bottom: 8px;
+      }
+      button.secondary { background: #27375c; color: var(--fg); }
+      button.ghost { background: transparent; color: var(--muted); }
+      .muted { color: var(--muted); font-size: 13px; }
+      .device {
+        display: flex; align-items: center; justify-content: space-between;
+        background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 10px; cursor: pointer;
+      }
+      .device:active { opacity: 0.8; }
+      .device .name { font-weight: 600; font-size: 16px; }
+      .device .sub { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+      .pill { font-size: 11px; color: var(--muted); }
+      .overlay {
+        position: fixed; inset: 0; background: rgba(6,10,20,0.75);
+        display: none; align-items: center; justify-content: center; padding: 20px; z-index: 10;
+      }
+      .overlay.show { display: flex; }
+      .sheet { background: var(--card); border-radius: 16px; padding: 20px; width: 100%; max-width: 420px; }
+      .big { font-size: 40px; font-weight: 700; line-height: 1.1; }
+      .status { font-size: 15px; margin: 10px 0; min-height: 22px; }
+      .spinner {
+        width: 34px; height: 34px; border: 4px solid #2a3a5c; border-top-color: var(--accent);
+        border-radius: 50%; animation: spin 1s linear infinite; margin: 10px auto;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .typegrid button { text-align: left; }
+      details { margin-top: 10px; }
+      pre#log {
+        font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted);
+        background: #0b1220; border-radius: 10px; padding: 10px; height: 140px; overflow: auto;
+        white-space: pre-wrap; margin: 8px 0 0;
+      }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>Lifevit</h1>
+
+    <!-- Aviso de permisos -->
+    <div id="permWarn" class="card hidden">
+      <div class="muted" style="margin-bottom:10px;">
+        Se necesitan permisos de Bluetooth y Ubicación para buscar dispositivos.
+      </div>
+      <button id="btnPerms">Conceder permisos</button>
+    </div>
+
+    <!-- HOME: lista de dispositivos -->
+    <div id="home">
+      <h2>Mis dispositivos</h2>
+      <div id="deviceList"></div>
+      <div id="emptyHint" class="muted" style="margin:8px 0 14px;">
+        Todavía no has añadido ningún dispositivo.
+      </div>
+      <button id="btnAdd">＋ Añadir dispositivo</button>
+    </div>
+
+    <!-- ADD: elegir tipo -->
+    <div id="addType" class="hidden">
+      <h2>Elige el tipo de dispositivo</h2>
+      <div class="typegrid" id="typeGrid"></div>
+      <button class="ghost" id="btnAddCancel">Cancelar</button>
+    </div>
+
+    <details>
+      <summary class="muted">🔬 Inspector BLE (ver nombres anunciados)</summary>
+      <div style="margin-top:10px;">
+        <button id="btnRawScan" class="secondary">Escanear BLE (crudo)</button>
+        <div id="rawList" class="muted" style="font-size:12px;"></div>
+      </div>
+    </details>
+
+    <details>
+      <summary class="muted">Ver log</summary>
+      <pre id="log"></pre>
+    </details>
+
+    <!-- OVERLAY único para emparejar/medir -->
+    <div id="overlay" class="overlay">
+      <div class="sheet">
+        <h2 id="ovTitle">—</h2>
+        <div id="ovSpinner" class="spinner"></div>
+        <div id="ovStatus" class="status muted">—</div>
+        <div id="ovResult"></div>
+        <canvas id="ovWave" width="360" height="90"
+          style="width:100%;height:90px;display:none;background:#0b1220;border-radius:10px;margin:10px 0 8px;"></canvas>
+        <button class="secondary" id="ovCancel">Cancelar</button>
+      </div>
+    </div>
+
+    <script>
+      // ---------------------------------------------------------- util
+      const $ = (id) => document.getElementById(id);
+      const logEl = $('log');
+      function log(...a) {
+        const s = a.map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(' ');
+        logEl.textContent += s + '\n';
+        logEl.scrollTop = logEl.scrollHeight;
+        try { console.log('[LV]', s); } catch (e) {}
+      }
+
+      const TYPES = [
+        { id: 'tensiometer', label: 'Tensiómetro', hint: 'Pulsa el botón del tensiómetro para la medida de prueba.' },
+        { id: 'oximeter', label: 'Pulsioxímetro', hint: 'Enciende el oxímetro y ponte el dedo.' },
+        { id: 'thermometer', label: 'Termómetro', hint: 'Enciende el termómetro y haz una medida.' },
+        { id: 'weightscale', label: 'Báscula', hint: 'Enciende la báscula y súbete.' },
+      ];
+      const labelFor = (t) => (TYPES.find((x) => x.id === t) || {}).label || t;
+      const hintFor = (t) => (TYPES.find((x) => x.id === t) || {}).hint || 'Enciende el dispositivo.';
+
+      // ---------------------------------------------------------- storage
+      function loadDevices() {
+        try { return JSON.parse(localStorage.getItem('lv_devices') || '[]'); } catch (e) { return []; }
+      }
+      function saveDevices(list) {
+        try { localStorage.setItem('lv_devices', JSON.stringify(list)); } catch (e) {}
+      }
+      function addDevice(dev) {
+        const list = loadDevices().filter((d) => d.address !== dev.address);
+        list.push(dev);
+        saveDevices(list);
+      }
+
+      let Lifevit = null;
+      let op = null; // operación en curso: { mode:'pair'|'measure', deviceType, address }
+
+      // ---------------------------------------------------------- render
+      function renderHome() {
+        $('home').classList.remove('hidden');
+        $('addType').classList.add('hidden');
+        const list = loadDevices();
+        $('emptyHint').style.display = list.length ? 'none' : 'block';
+        const el = $('deviceList');
+        el.innerHTML = '';
+        list.forEach((d) => {
+          const row = document.createElement('div');
+          row.className = 'device';
+          row.innerHTML =
+            '<div><div class="name">' + d.name + '</div>' +
+            '<div class="sub">' + d.address + '</div></div>' +
+            '<div class="pill">' + labelFor(d.deviceType) + ' ›</div>';
+          row.onclick = () => startMeasure(d);
+          el.appendChild(row);
+        });
+      }
+
+      function renderTypeGrid() {
+        const g = $('typeGrid');
+        g.innerHTML = '';
+        TYPES.forEach((t) => {
+          const b = document.createElement('button');
+          b.className = 'secondary';
+          b.textContent = t.label;
+          b.onclick = () => startPair(t.id);
+          g.appendChild(b);
+        });
+      }
+
+      // ---------------------------------------------------------- overlay
+      function showOverlay(title, status) {
+        $('ovTitle').textContent = title;
+        $('ovStatus').textContent = status;
+        $('ovStatus').className = 'status muted';
+        $('ovResult').innerHTML = '';
+        resetWave();
+        $('ovSpinner').style.display = 'block';
+        $('ovCancel').textContent = 'Cancelar';
+        $('overlay').classList.add('show');
+      }
+      function setStatus(msg, cls) {
+        $('ovStatus').textContent = msg;
+        $('ovStatus').className = 'status ' + (cls || 'muted');
+      }
+      function hideOverlay() {
+        $('overlay').classList.remove('show');
+      }
+
+      // ---- gráfica de pletismografía (pulso), ventana de tiempo tipo osciloscopio ----
+      const wave = { buf: [], windowMs: 4500 }; // 60 ppm = 1 pulso/s → ~4-5 pulsos; luego scroll
+      function resetWave() {
+        wave.buf = [];
+        const c = $('ovWave');
+        if (c) { c.style.display = 'none'; c.getContext('2d').clearRect(0, 0, c.width, c.height); }
+      }
+      function pushWave(v) {
+        const now = Date.now();
+        wave.buf.push({ t: now, v });
+        const cut = now - wave.windowMs;
+        while (wave.buf.length && wave.buf[0].t < cut) wave.buf.shift();
+        const c = $('ovWave');
+        if (!c) return;
+        c.style.display = 'block';
+        const ctx = c.getContext('2d');
+        const W = c.width, H = c.height, b = wave.buf;
+        ctx.clearRect(0, 0, W, H);
+        if (b.length < 2) return;
+        const vs = b.map((p) => p.v);
+        let mn = Math.min.apply(null, vs), mx = Math.max.apply(null, vs);
+        if (mx === mn) mx = mn + 1;
+        const t0 = now - wave.windowMs;
+        const pts = b.map((p) => ({
+          x: ((p.t - t0) / wave.windowMs) * W,
+          y: H - ((p.v - mn) / (mx - mn)) * (H - 8) - 4,
+        }));
+        ctx.strokeStyle = '#39d98a';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        // Suavizado: curva cuadrática por puntos medios.
+        for (let i = 1; i < pts.length - 1; i++) {
+          const xc = (pts[i].x + pts[i + 1].x) / 2;
+          const yc = (pts[i].y + pts[i + 1].y) / 2;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+        }
+        const last = pts[pts.length - 1];
+        ctx.lineTo(last.x, last.y);
+        ctx.stroke();
+      }
+
+      function renderResult(e) {
+        const r = $('ovResult');
+        if (e.deviceType === 'tensiometer') {
+          let extra = '<div class="muted">Pulso ' + Math.round(e.pulse) + ' ppm</div>';
+          if (e.ihb) {
+            extra += '<div style="color:var(--err);font-weight:600;margin-top:4px;">⚠ Arritmia (latido irregular)</div>';
+          }
+          if (e.errorCode && e.errorCode !== 0) {
+            extra += '<div style="color:var(--err);margin-top:4px;">Error: ' +
+              (e.errorMessage || e.errorCode) + '</div>';
+          }
+          r.innerHTML = '<div class="big">' + Math.round(e.systolic) + ' / ' + Math.round(e.diastolic) +
+            '</div>' + extra;
+        } else if (e.deviceType === 'oximeter') {
+          const pi = e.pi != null ? (e.pi / 10).toFixed(1) : '–'; // BerryMed PI suele ir en 0,1%
+          const rpm = e.rpm != null && e.rpm > 0 ? e.rpm : '–';
+          r.innerHTML = '<div class="big">SpO₂ ' + e.spo2 + '%</div>' +
+            '<div class="muted">Pulso ' + e.lpm + ' ppm · PI ' + pi + '% · RPM ' + rpm + '</div>';
+        } else if (e.deviceType === 'thermometer') {
+          r.innerHTML = '<div class="big">' + e.value + '°</div>';
+        } else if (e.deviceType === 'weightscale') {
+          r.innerHTML = '<div class="big">' + e.weight + '</div>';
+        }
+      }
+
+      const isValid = (e) =>
+        (e.deviceType === 'tensiometer' && e.systolic > 0) ||
+        (e.deviceType === 'oximeter' && e.spo2 > 0 && e.spo2 <= 100) || // 127 = sin dedo
+        (e.deviceType === 'thermometer' && e.value > 0) ||
+        (e.deviceType === 'weightscale' && e.weight > 0);
+
+      // ---------------------------------------------------------- flujos
+      function clearOp() {
+        if (op && op.timer) clearTimeout(op.timer);
+        if (op && op.watchdog) clearTimeout(op.watchdog);
+        op = null;
+      }
+
+      // Oxímetro: fija la última lectura estable como resultado final.
+      async function finalizeStreaming(reason) {
+        if (!op || !op.streaming || op.finalized) return;
+        if (!op.lastValid) return;
+        op.finalized = true;
+        const last = op.lastValid;
+        renderResult(last);
+        $('ovResult').innerHTML =
+          '<div class="muted" style="margin-bottom:4px;">Resultado final</div>' + $('ovResult').innerHTML;
+        $('ovSpinner').style.display = 'none';
+        setStatus('✅ Medida finalizada' + (reason ? ' (' + reason + ')' : ''), 'ok');
+        log('oxi finalizado:', reason || '');
+        await endOp();
+      }
+      async function endOp() {
+        const dt = op && op.deviceType;
+        clearOp();
+        if (dt) { try { await Lifevit.disconnect({ deviceType: dt }); } catch (e) {} }
+      }
+
+      function startPair(deviceType) {
+        op = { mode: 'pair', deviceType };
+        showOverlay('Añadir ' + labelFor(deviceType), hintFor(deviceType));
+        op.timer = setTimeout(() => abort('No se detectó ningún dispositivo (1 min).'), 60000);
+        log('pair: conectando por tipo', deviceType);
+        Lifevit.connect({ deviceType, timeout: 60000 }).catch((e) => abort('Error: ' + (e.message || e)));
+      }
+
+      function startMeasure(dev) {
+        const streaming = dev.deviceType === 'oximeter';
+        op = { mode: 'measure', deviceType: dev.deviceType, address: dev.address, streaming };
+        const hint = streaming
+          ? 'Ponte el dedo en el oxímetro…'
+          : 'Pulsa el botón del dispositivo para iniciar la medida…';
+        showOverlay(dev.name, hint);
+        $('ovCancel').textContent = streaming ? 'Finalizar' : 'Cancelar';
+        op.timer = setTimeout(() => abort('Tiempo agotado: no se detectó el dispositivo (1 min).'), 60000);
+        log('measure: conectando', dev.address);
+        Lifevit.connect({ deviceType: dev.deviceType, address: dev.address, timeout: 60000 })
+          .catch((e) => abort('Error: ' + (e.message || e)));
+      }
+
+      async function abort(msg) {
+        setStatus(msg, 'muted');
+        $('ovSpinner').style.display = 'none';
+        await endOp();
+        setTimeout(hideOverlay, 1400);
+        renderHome();
+      }
+
+      // ---------------------------------------------------------- listeners
+      async function wireListeners() {
+        await Lifevit.addListener('connectionChanged', async (e) => {
+          if (!op || e.deviceType !== op.deviceType) return;
+          if (e.status === 'scanning') setStatus('Buscando el dispositivo… (pulsa su botón)');
+          else if (e.status === 'connecting') setStatus('Conectando…');
+          else if (e.status === 'connected') {
+            setStatus('Conectado. Midiendo…', 'ok');
+            if (op.mode === 'pair') {
+              try {
+                const { address } = await Lifevit.getDeviceAddress({ deviceType: op.deviceType });
+                const name = labelFor(op.deviceType) + ' (' + (address ? address.slice(-5) : '?') + ')';
+                addDevice({ deviceType: op.deviceType, address, name });
+                $('ovSpinner').style.display = 'none';
+                setStatus('✅ Dispositivo guardado: ' + name, 'ok');
+                clearOp();
+                try { await Lifevit.disconnect({ deviceType: op ? op.deviceType : address }); } catch (x) {}
+                setTimeout(() => { hideOverlay(); renderHome(); }, 1600);
+              } catch (x) { abort('No se pudo leer la dirección.'); }
+            }
+          } else if (e.status === 'disconnected') {
+            // Oxímetro: si se desconecta tras haber medido (dedo retirado) → valor final.
+            if (op.streaming && op.lastValid && !op.finalized) {
+              await finalizeStreaming('desconectado');
+            }
+          }
+        });
+
+        await Lifevit.addListener('measurementProgress', (e) => {
+          if (!op) return;
+          if (op.streaming && op.deviceType === 'oximeter') {
+            pushWave(Number(e.progress) || 0); // pletismografía → gráfica de pulso
+          } else {
+            setStatus('Midiendo… (' + e.progress + ')', 'ok');
+          }
+        });
+
+        await Lifevit.addListener('measurement', async (e) => {
+          if (!op || op.mode !== 'measure') return;
+          const hardError = e.errorCode && e.errorCode !== 0;
+          if (hardError) {
+            renderResult(e);
+            $('ovSpinner').style.display = 'none';
+            setStatus('Medida con error: ' + (e.errorMessage || e.errorCode), 'muted');
+            await endOp();
+            return;
+          }
+
+          if (op.streaming) {
+            if (op.deviceType === 'oximeter') log('oxi spo2=' + e.spo2 + ' pulso=' + e.lpm + ' pi=' + e.pi);
+            if (isValid(e)) {
+              // Lectura válida en vivo: la mostramos y guardamos como "última estable".
+              op.lastValid = e;
+              renderResult(e);
+              $('ovSpinner').style.display = 'none';
+              if (op.timer) { clearTimeout(op.timer); op.timer = null; } // ya enganchó
+              setStatus('🟢 Midiendo en vivo… (quita el dedo para obtener el valor final)', 'ok');
+              // Watchdog: si dejan de llegar lecturas (dedo retirado), fijamos el final.
+              if (op.watchdog) clearTimeout(op.watchdog);
+              op.watchdog = setTimeout(() => finalizeStreaming('dedo retirado'), 3500);
+            }
+            return;
+          }
+
+          // Un disparo (tensiómetro/termómetro/báscula)
+          if (isValid(e)) {
+            renderResult(e);
+            $('ovSpinner').style.display = 'none';
+            setStatus('✅ Medida completada', 'ok');
+            await endOp();
+          }
+        });
+
+        await Lifevit.addListener('connectionError', (e) => {
+          log('connectionError', e);
+          // Cualquier error de conexión (Bluetooth/ubicación/…) aborta la medida.
+          if (op) abort('⚠ ' + (e.message || ('Error de conexión ' + e.errorCode)));
+        });
+      }
+
+      // ---------------------------------------------------------- permisos
+      async function ensurePermissions() {
+        try {
+          const r = await Lifevit.requestPermissions();
+          if (!r.granted) {
+            $('permWarn').classList.remove('hidden');
+            return false;
+          }
+          $('permWarn').classList.add('hidden');
+          return true;
+        } catch (e) {
+          $('permWarn').classList.remove('hidden');
+          return false;
+        }
+      }
+
+      // ---------------------------------------------------------- init
+      async function init() {
+        Lifevit = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Lifevit;
+        if (!Lifevit) { log('Plugin Lifevit no disponible (¿estás en Android?).'); return; }
+
+        await wireListeners();
+        renderTypeGrid();
+        renderHome();
+
+        $('btnPerms').onclick = ensurePermissions;
+        $('btnAdd').onclick = async () => {
+          if (!(await ensurePermissions())) return;
+          $('home').classList.add('hidden');
+          $('addType').classList.remove('hidden');
+        };
+        $('btnAddCancel').onclick = renderHome;
+        $('ovCancel').onclick = () => abort(op && op.streaming ? 'Medición finalizada.' : 'Cancelado.');
+
+        // Inspector BLE en crudo (para identificar el nombre anunciado, p. ej. el OL-750)
+        const rawSeen = {};
+        await Lifevit.addListener('rawScanResult', (d) => {
+          rawSeen[d.address] = d;
+          const rows = Object.values(rawSeen).sort((a, b) => b.rssi - a.rssi).map((x) => {
+            const md = (x.manufacturerData || []).map((m) => 'co=' + m.companyId + ' ' + m.hex).join(' ; ');
+            return '<div style="padding:4px 0;border-bottom:1px solid #223;">' +
+              '<b style="color:var(--fg)">' + (x.name || '(sin nombre)') + '</b> · ' + x.address +
+              ' · rssi ' + x.rssi + (md ? '<br>manuf: ' + md : '') + '</div>';
+          });
+          $('rawList').innerHTML = rows.join('');
+        });
+        $('btnRawScan').onclick = async () => {
+          if (!(await ensurePermissions())) return;
+          Object.keys(rawSeen).forEach((k) => delete rawSeen[k]);
+          $('rawList').textContent = 'Escaneando 15 s… enciende el dispositivo.';
+          try { await Lifevit.rawScan({ timeout: 15000 }); } catch (e) { log('rawScan', e.message || e); }
+        };
+
+        await ensurePermissions(); // comprobar/pedir al arrancar
+        log('App lista.');
+      }
+
+      document.addEventListener('DOMContentLoaded', init);
+    </script>
+  </body>
+</html>

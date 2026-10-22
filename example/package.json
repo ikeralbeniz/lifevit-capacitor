@@ -1,0 +1,20 @@
+{
+  "name": "lifevit-example",
+  "version": "0.0.1",
+  "private": true,
+  "description": "App mínima para probar el plugin lifevit-capacitor en un dispositivo Android.",
+  "scripts": {
+    "sync": "cap sync android",
+    "android": "cap run android",
+    "open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.5.3",
+    "lifevit-capacitor": "file:.."
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0"
+  }
+}

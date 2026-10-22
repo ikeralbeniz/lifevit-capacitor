@@ -1,0 +1,73 @@
+{
+  "name": "lifevit-capacitor",
+  "version": "0.0.1",
+  "description": "Capacitor plugin wrapping the Lifevit BLE SDK (Android + iOS): scan, connect and take a measurement.",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "unpkg": "dist/plugin.js",
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "dist/",
+    "src/",
+    "ios/Sources",
+    "ios/Tests",
+    "Package.swift",
+    "LifevitCapacitor.podspec"
+  ],
+  "author": "Iker Perez de Albeniz",
+  "license": "MIT",
+  "keywords": [
+    "capacitor",
+    "plugin",
+    "lifevit",
+    "ble",
+    "bluetooth",
+    "health",
+    "oximeter",
+    "blood-pressure",
+    "android",
+    "ios"
+  ],
+  "scripts": {
+    "verify:android": "cd android && ./gradlew clean build test && cd ..",
+    "verify:web": "npm run build",
+    "lint": "eslint . --ext ts && prettier \"**/*.{css,html,ts,js,java}\" --check",
+    "fmt": "eslint . --ext ts --fix && prettier \"**/*.{css,html,ts,js,java}\" --write",
+    "docgen": "docgen --api LifevitPlugin --output-readme README.md --output-json dist/docs.json",
+    "build": "npm run clean && npm run docgen && tsc && rollup -c rollup.config.mjs",
+    "clean": "rimraf ./dist",
+    "watch": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/docgen": "^0.3.1",
+    "@ionic/eslint-config": "^0.4.0",
+    "@ionic/prettier-config": "^4.0.0",
+    "eslint": "^8.57.1",
+    "prettier": "^3.6.2",
+    "prettier-plugin-java": "^2.7.7",
+    "rimraf": "^6.1.0",
+    "rollup": "^4.53.2",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  },
+  "prettier": "@ionic/prettier-config",
+  "eslintConfig": {
+    "extends": "@ionic/eslint-config/recommended"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
+}

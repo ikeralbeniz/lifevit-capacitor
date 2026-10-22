@@ -1,0 +1,4 @@
+[submodule "ios/vendor/lifevit-ios-sdk"]
+	path = ios/vendor/lifevit-ios-sdk
+	url = https://github.com/lifevit/ios-sdk.git
+	branch = 2.2.2
