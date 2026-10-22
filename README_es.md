@@ -41,10 +41,28 @@ el campo `address` transporta ese UUID de forma transparente.
 
 ## Instalación
 
+Este paquete no está publicado en el registro de npm. Se instala desde GitHub:
+o bien un tarball de release (autosuficiente para JS + Android) o el repo git:
+
 ```bash
-npm install lifevit-capacitor
+# Desde un fichero adjunto a un release (recomendado; incluye el dist/ ya compilado)
+npm install https://github.com/ikeralbeniz/lifevit-capacitor/releases/download/v0.0.1/lifevit-capacitor-0.0.1.tgz
+
+# O directamente desde git, fijado a un tag (compila con el script `prepare`)
+npm install github:ikeralbeniz/lifevit-capacitor#v0.0.1
+```
+
+Luego:
+
+```bash
 npx cap sync
 ```
+
+> En **iOS**, ninguna de las dos formas incluye el `LifevitSDK.xcframework` (está
+> en un submódulo de git). Para iOS, consume el plugin desde un clon con
+> `--recurse-submodules`, o coloca tú el xcframework en
+> `ios/vendor/lifevit-ios-sdk/LifevitSDK.xcframework`. Android y web funcionan
+> directamente desde el tarball/git.
 
 ### El SDK de Lifevit NO se incluye
 
